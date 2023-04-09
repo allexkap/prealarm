@@ -1,23 +1,28 @@
-#define DELTA 10000
-#define EXTRA 5000
-#define STEP  30 * 60*1000/DELTA
+#define DELTA 9000      // us
+#define EXTRA 900000    // ms
 
 
 #include <SoftwareSerial.h>
+SoftwareSerial BTSerial(4, 5);
 
 volatile uint64_t crossing = 0;
-uint64_t delta = DELTA;
+uint64_t delta = -1;
 
-uint64_t timestamp = 0, step = STEP, extra = EXTRA;
-bool state = 0;
-
-SoftwareSerial BTSerial(4, 5);
+uint64_t timestamp = 0;
+volatile uint64_t step = 0;
+volatile bool state = 0;
 
 
 void setup() {
     BTSerial.begin(9600);
-    DDRD |= (1 << 6);
+
+    DDRD |= (1 << 6);   // light dimmer
+    DDRD |= (1 << 7);   // button GND
+    DDRB |= (1 << 1);   // button OUT
+    PORTB |= (1 << 1);  // button VCC
+
     attachInterrupt(0, trigger, RISING);
+    attachInterrupt(1,   abort, RISING);
 }
 
 void loop() {
@@ -28,15 +33,16 @@ void loop() {
     if (millis() - timestamp >= step) {
         timestamp = millis();
         if (state) {
-            if (!--delta) state = 0;
+            if (!--delta) {
+                step = EXTRA;
+                state = 0;
+            }
         }
         else {
-            if (!--extra) {
-                state = 1;
-                delta = DELTA;
-                extra = EXTRA;
-                wait();
-            }
+            while (!BTSerial.available());
+            step = BTSerial.parseInt();
+            delta = DELTA;
+            state = 1;
         }
     }
 }
@@ -46,7 +52,6 @@ void trigger() {
     crossing = micros();
 }
 
-void wait() {
-    while (!BTSerial.available());
-    step = BTSerial.parseInt();
+void abort() {
+    state = step = 0;
 }

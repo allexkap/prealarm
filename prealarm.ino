@@ -40,7 +40,7 @@ void loop() {
         }
         else {
             while (!BTSerial.available());
-            step = BTSerial.parseInt();
+            BTSerial.write(step = BTSerial.read());
             delta = DELTA;
             state = 1;
         }

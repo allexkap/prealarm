@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
 import schedule
+import re
 
 
 class Alarms:
@@ -16,19 +16,15 @@ class Alarms:
         job.start_day = cls.weekdays[weekday]
         return job
 
-    def shift(self, weekday, time):
-        time = datetime.strptime(time, '%H:%M')    # except
-        time = timedelta(hours=time.hour, minutes=time.minute)
-        time -= timedelta(seconds=self.delay)
-        if time < timedelta():
-            time += timedelta(days=1)
-            weekday = (weekday - 1) % 7
-        time = str(time)[:-3]
-        return self.dayof(schedule.every().week, weekday).at(self.shift(time)).do(self.func)
-
     def add(self, weekday, time):
+        try:
+            h, m = map(int, re.match(r'(\d{1,2})[ .:](\d{1,2})$', time).groups())
+        except AttributeError:
+            raise ValueError(f'time data {time} does not match format \'HH:MM\'')
+        s = ((h * 60) + m) * 60 - self.delay
+        time = f'{s//3600%24:02}:{s//60%60:02}:{s%60:02}'
         self.remove(weekday)
-        self.alarms[weekday] = self.shift(weekday, time)
+        self.alarms[weekday] = self.dayof(schedule.every().week, weekday - (s<0)).at(time).do(self.func)
 
     def remove(self, weekday):
         if self.alarms[weekday]:
@@ -41,4 +37,6 @@ def task():
 
 alarms = Alarms(task)
 
-alarms.add(0, '12:32')
+alarms.add(6, '00:10')
+a = schedule.get_jobs()
+print(a)

@@ -21,11 +21,12 @@ void light_dimmer() {
     TCCR1B = 0b010;     // прескелер на 8
     OCR1A = 0;          // значение A
     TIMSK1 = 0b010;     // разрешаем А
-    attachInterrupt(0, trigger, RISING);
+    EIMSK |= (1 << 0);  // включаем int0
+    EICRA |= 0b11;      // на rising
     sei();
 }
 
-void trigger() {
+ISR(INT0_vect) {
     PORTD &= ~(1 << 6);
     OCR1A = delta;      // значение A
     TIFR1 |= (1 << 1);  // сброс флага A

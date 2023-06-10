@@ -13,23 +13,8 @@ logging.basicConfig(
 import asyncio
 import schedule
 from serial import Serial
+from alarms import Alarms
 
-
-class Alarms:
-
-    weekdays = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
-
-    def __init__(self, func):
-        self.alarms = [None] * 7
-        self.func = func
-
-    def add(self, weekday, time):
-        self.remove(weekday)
-        self.alarms[weekday] = eval(f'schedule.every().{Alarms.weekdays[weekday]}.at(time)').do(self.func)
-
-    def remove(self, weekday):
-        if self.alarms[weekday]:
-            schedule.cancel_job(self.alarms[weekday])
 
 
 def sunrise(value=b'\x01'):
@@ -46,7 +31,6 @@ def sunrise(value=b'\x01'):
 
 async def schedule_handler():
     while True:
-        print(schedule.idle_seconds())
         schedule.run_pending()
         await asyncio.sleep(1)
 

@@ -30,13 +30,3 @@ class Alarms:
         if self.alarms[weekday]:
             schedule.cancel_job(self.alarms[weekday])
         self.alarms[weekday] = None
-
-
-def task():
-    pass
-
-alarms = Alarms(task)
-
-alarms.add(6, '00:10')
-a = schedule.get_jobs()
-print(a)

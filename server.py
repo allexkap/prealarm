@@ -32,6 +32,8 @@ def sunrise(value=b'\x01'):
             sleep(1)
         else:
             break
+    else:
+        logging.error('drop alarm')
 
 
 async def schedule_handler():

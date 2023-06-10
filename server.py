@@ -12,6 +12,7 @@ logging.basicConfig(
 
 import asyncio
 import schedule
+from time import sleep
 from serial import Serial
 from alarms import Alarms
 
@@ -19,14 +20,18 @@ from alarms import Alarms
 
 def sunrise(value=b'\x01'):
     logging.info(f'send {value = }')
-    try:
-        with Serial('ttyBT', timeout=0.1) as device:
-            device.write(value)
-            device.flush()
-            echo = device.read()
-            assert echo == value, f'incorrect {echo = }'
-    except Exception as e:
-        logging.error(e)
+    for i in range(5):
+        try:
+            with Serial('ttyBT', timeout=0.1) as device:
+                device.write(value)
+                device.flush()
+                echo = device.read()
+                assert echo == value, f'incorrect {echo = }'
+        except Exception as e:
+            logging.error(e)
+            sleep(1)
+        else:
+            break
 
 
 async def schedule_handler():

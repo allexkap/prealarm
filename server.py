@@ -3,10 +3,11 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Tuple, Union
 
 from aiogram import Bot, Dispatcher, F, exceptions, types
 from aiogram.filters.command import Command
+
+from alarms import Alarms
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +20,7 @@ logging.basicConfig(
 )
 
 
+ALARMS_PATH = Path('alarms.json')
 WEEK = (
     'Воскресенье',
     'Понедельник',
@@ -29,30 +31,22 @@ WEEK = (
     'Суббота',
 )
 
+bot = Bot(token=os.environ['TELEGRAM_BOT_TOKEN'])
+dp = Dispatcher()
+
 
 def get_timetable_message():
-    data = ('8.00', '6.00', '6.00', '6.00', '6.00', '6.00', '8.00')
-    text = 'Текущее расписание\n' + '\n'.join(
-        f'{data[i]} - {WEEK[i]}' for i in (1, 2, 3, 4, 5, 6, 0)
-    )
+    header = 'Текущее расписание\n'
+    text = '\n'.join(f'{alarms[day]} - {WEEK[day]}' for day in sorted(alarms))
+    if not text:
+        text = 'Отсутствует'
     markup = types.InlineKeyboardMarkup(
         inline_keyboard=[
             [types.InlineKeyboardButton(text='Обновить', callback_data='view')],
             [types.InlineKeyboardButton(text='Редактировать', callback_data='edit')],
         ]
     )
-    return text, markup
-
-
-def parse_time(text: str) -> Union[Tuple[int, int], None]:
-    return (0, 0)
-
-
-bot = Bot(token=os.environ['TELEGRAM_BOT_TOKEN'])
-dp = Dispatcher()
-with open('profiles.json') as file:
-    profiles = set(json.load(file))
-    dp.message.filter(F.from_user.id.in_(profiles))
+    return header + text, markup
 
 
 async def send_timetable(message: types.Message):
@@ -72,6 +66,32 @@ async def cmd_start(message: types.Message):
 @dp.message(F.text)
 async def text_handler(message: types.Message, data={}):
     assert message.from_user
+    assert message.text
+
+    if message.from_user.id in data:
+        try:
+            alarms[data[message.from_user.id]] = message.text
+        except ValueError:
+            pass
+        else:
+            with open(ALARMS_PATH, 'w') as file:
+                file.write(alarms.dump())
+            await message.answer(
+                text='Сохранил',
+                reply_markup=types.ReplyKeyboardRemove(),
+            )
+            await send_timetable(message)
+            return
+        finally:
+            del data[message.from_user.id]
+
+    if message.text in WEEK:
+        data[message.from_user.id] = WEEK.index(message.text)
+        await message.answer(
+            text='Напиши время',
+            reply_markup=types.ReplyKeyboardRemove(),
+        )
+        return
 
     if message.text == 'Отмена':
         await message.answer(
@@ -79,35 +99,13 @@ async def text_handler(message: types.Message, data={}):
             reply_markup=types.ReplyKeyboardRemove(),
         )
         await send_timetable(message)
+        return
 
-    elif message.text in WEEK:
-        data[message.from_user.id] = WEEK.index(message.text)
-        await message.answer(
-            text='Напиши время',
-            reply_markup=types.ReplyKeyboardRemove(),
-        )
-
-    elif (
-        message.from_user.id in data
-        and message.text
-        and (time := parse_time(message.text))
-    ):
-        logging.info(
-            f'Change alarm time for user={message.from_user.id} '
-            f'day={data[message.from_user.id]} time={time}'
-        )
-        del data[message.from_user.id]
-        await message.answer(
-            text='Сохранил',
-            reply_markup=types.ReplyKeyboardRemove(),
-        )
-        await send_timetable(message)
-
-    else:
-        await message.answer(
-            text='Я чет не пон :(', reply_markup=types.ReplyKeyboardRemove()
-        )
-        await send_timetable(message)
+    await message.answer(
+        text='Я чет не пон :(',
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+    await send_timetable(message)
 
 
 @dp.callback_query(F.data == 'view')
@@ -143,6 +141,15 @@ async def callback_edit(callback: types.CallbackQuery):
 async def main():
     await dp.start_polling(bot)
 
+
+with open('profiles.json') as file:
+    profiles = set(json.load(file))
+    dp.message.filter(F.from_user.id.in_(profiles))
+
+alarms = Alarms(handler=lambda: None)
+if ALARMS_PATH.exists():
+    with open(ALARMS_PATH) as file:
+        alarms.load(file.read())
 
 if __name__ == '__main__':
     asyncio.run(main())

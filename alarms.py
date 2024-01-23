@@ -1,32 +1,48 @@
-import schedule
+import json
 import re
+from datetime import datetime, timedelta
+from typing import Callable
 
 
 class Alarms:
-
-    weekdays = ('sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday')
-
-    def __init__(self, func, delay=30*60):
-        self.alarms = [None] * 7
-        self.func = func
+    def __init__(self, handler: Callable, delay=timedelta(minutes=30)) -> None:
+        self.alarms = dict()
+        self.handler = handler
         self.delay = delay
 
-    @classmethod
-    def dayof(cls, job, weekday):
-        job.start_day = cls.weekdays[weekday]
-        return job
+    def __setitem__(self, day: int, time: str) -> None:
+        res = re.match(r'(\d{1,2})[ .:](\d\d)$', time)
+        if not res or day < 0 or day > 6:
+            raise ValueError
+        h, m = map(int, res.groups())
 
-    def add(self, weekday, time):
-        try:
-            h, m = map(int, re.match(r'(\d{1,2})[ .:](\d{1,2})$', time).groups())
-        except AttributeError:
-            raise ValueError(f'time data {time} does not match format \'HH:MM\'')
-        s = ((h * 60) + m) * 60 - self.delay
-        time = f'{s//3600%24:02}:{s//60%60:02}:{s%60:02}'
-        self.remove(weekday)
-        self.alarms[weekday] = self.dayof(schedule.every().week, weekday - (s<0)).at(time).do(self.func)
+        now = datetime.now()
+        dtime = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        dtime -= self.delay
 
-    def remove(self, weekday):
-        if self.alarms[weekday]:
-            schedule.cancel_job(self.alarms[weekday])
-        self.alarms[weekday] = None
+        dtime += timedelta(days=(day - now.isoweekday()) % 7)
+        if dtime < now:
+            dtime += timedelta(weeks=1)
+        self.alarms[day] = dtime
+
+    def __getitem__(self, day: int) -> str:
+        dtime = self.alarms[day] + self.delay
+        return dtime.strftime('%H.%M')
+
+    def __iter__(self):
+        yield from self.alarms
+
+    def __call__(self) -> None:
+        now = datetime.now()
+        for _, time in self.alarms:
+            if now > time:
+                time += timedelta(weeks=1)
+                self.handler()
+
+    def dump(self) -> str:
+        return json.dumps({key: self[key] for key in self.alarms})
+
+    def load(self, data: str) -> None:
+        self.alarms.clear()
+        for k, v in json.loads(data).items():
+            self[int(k)] = v

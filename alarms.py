@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from datetime import datetime, timedelta
@@ -32,12 +33,15 @@ class Alarms:
     def __iter__(self):
         yield from self.alarms
 
-    def __call__(self) -> None:
-        now = datetime.now()
-        for _, time in self.alarms:
-            if now > time:
-                time += timedelta(weeks=1)
-                self.handler()
+    async def __call__(self) -> None:
+        while True:
+            now = datetime.now()
+            print(now)
+            for _, time in self.alarms.items():
+                if now > time:
+                    time += timedelta(weeks=1)
+                    self.handler()
+            await asyncio.sleep(1)
 
     def dump(self) -> str:
         return json.dumps({key: self[key] for key in self.alarms})

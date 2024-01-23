@@ -156,7 +156,10 @@ def sunrise(value=b'\x01'):
 
 
 async def main():
-    await dp.start_polling(bot)
+    await asyncio.gather(
+        dp.start_polling(bot),
+        alarms(),
+    )
 
 
 with open('profiles.json') as file:

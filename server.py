@@ -39,7 +39,10 @@ dp = Dispatcher()
 
 def get_timetable_message():
     header = 'Текущее расписание\n'
-    text = '\n'.join(f'{alarms[day]} - {WEEK[day]}' for day in sorted(alarms))
+    text = '\n'.join(
+        f'{alarms[day]} - {WEEK[day]}'
+        for day in sorted(alarms, key=lambda d: (d - 1) % 7)
+    )
     if not text:
         text = 'Отсутствует'
     markup = types.InlineKeyboardMarkup(
@@ -136,7 +139,7 @@ async def callback_edit(callback: types.CallbackQuery):
     await callback.message.edit_reply_markup()
 
 
-def sunrise(value=b'\x01'):
+def sunrise(value=b'\xc8'):
     logging.info(f'Sending {value=}')
     for _ in range(5):
         try:

@@ -36,9 +36,9 @@ class Alarms:
     async def __call__(self) -> None:
         while True:
             now = datetime.now()
-            for _, time in self.alarms.items():
-                if now > time:
-                    time += timedelta(weeks=1)
+            for day in self.alarms:
+                if now > self.alarms[day]:
+                    self.alarms[day] += timedelta(weeks=1)
                     self.handler()
             await asyncio.sleep(1)
 

@@ -2,10 +2,12 @@ import asyncio
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F, exceptions, types
 from aiogram.filters.command import Command
+from serial import Serial
 
 from alarms import Alarms
 
@@ -110,9 +112,7 @@ async def text_handler(message: types.Message, data={}):
 
 @dp.callback_query(F.data == 'view')
 async def callback_view(callback: types.CallbackQuery):
-    if not isinstance(callback.message, types.Message):
-        logging.warning('callback.message is not instance of types.Message')
-        return
+    assert isinstance(callback.message, types.Message)
     text, markup = get_timetable_message()
     try:
         await callback.message.edit_text(text=text, reply_markup=markup)
@@ -123,9 +123,7 @@ async def callback_view(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == 'edit')
 async def callback_edit(callback: types.CallbackQuery):
-    if not isinstance(callback.message, types.Message):
-        logging.warning('callback.message is not instance of types.Message')
-        return
+    assert isinstance(callback.message, types.Message)
     markup = types.ReplyKeyboardMarkup(
         keyboard=[
             [types.KeyboardButton(text=WEEK[1]), types.KeyboardButton(text=WEEK[4])],
@@ -138,6 +136,25 @@ async def callback_edit(callback: types.CallbackQuery):
     await callback.message.edit_reply_markup()
 
 
+def sunrise(value=b'\x01'):
+    logging.info(f'Sending {value=}')
+    for i in range(5):
+        try:
+            with Serial('./ttybt', timeout=0.1) as device:
+                device.write(value)
+                device.flush()
+                echo = device.read()
+                assert echo == value, f'Sent {value=} != received {echo=}'
+        except Exception as ex:
+            logging.error(ex)
+            time.sleep(1)
+        else:
+            logging.info(f'Echo received successfully')
+            break
+    else:
+        logging.error('Drop alarm')
+
+
 async def main():
     await dp.start_polling(bot)
 
@@ -146,7 +163,7 @@ with open('profiles.json') as file:
     profiles = set(json.load(file))
     dp.message.filter(F.from_user.id.in_(profiles))
 
-alarms = Alarms(handler=lambda: None)
+alarms = Alarms(handler=sunrise)
 if ALARMS_PATH.exists():
     with open(ALARMS_PATH) as file:
         alarms.load(file.read())

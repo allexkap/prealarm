@@ -1,53 +1,127 @@
+import asyncio
 import logging
+import os
+from pathlib import Path
+from typing import Tuple, Union
+
+from aiogram import Bot, Dispatcher, F, exceptions, types
+from aiogram.filters.command import Command
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s',
+    format='[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=(
-        logging.FileHandler('server.log'),
+        logging.FileHandler(Path(__file__).with_suffix('.log'), 'a'),
         logging.StreamHandler(),
     ),
 )
 
 
-import asyncio
-import schedule
-from time import sleep
-from serial import Serial
-from alarms import Alarms
+WEEK = (
+    'Воскресенье',
+    'Понедельник',
+    'Вторник',
+    'Среда',
+    'Четверг',
+    'Пятница',
+    'Суббота',
+)
 
 
+def get_timetable_message():
+    data = ('8.00', '6.00', '6.00', '6.00', '6.00', '6.00', '8.00')
+    text = 'Текущее расписание:\n' + '\n'.join(
+        f'{data[i]} - {WEEK[i]}' for i in (1, 2, 3, 4, 5, 6, 0)
+    )
+    markup = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text='Обновить', callback_data='view')],
+            [types.InlineKeyboardButton(text='Редактировать', callback_data='edit')],
+        ]
+    )
+    return text, markup
 
-def sunrise(value=b'\x01'):
-    logging.info(f'send {value = }')
-    for i in range(5):
-        try:
-            with Serial('ttyBT', timeout=0.1) as device:
-                device.write(value)
-                device.flush()
-                echo = device.read()
-                assert echo == value, f'incorrect {echo = }'
-        except Exception as e:
-            logging.error(e)
-            sleep(1)
-        else:
-            break
+
+def parse_time(text: str) -> Union[Tuple[int, int], None]:
+    return (0, 0)
+
+
+bot = Bot(token=os.environ['TELEGRAM_BOT_TOKEN'])
+dp = Dispatcher()
+
+
+@dp.message(Command('start'))
+async def cmd_start(message: types.Message):
+    text, keyboard = get_timetable_message()
+    await message.answer(text=text, reply_markup=keyboard)
+
+
+@dp.message(F.text)
+async def text_handler(message: types.Message, data={}):
+    assert message.from_user
+
+    if message.text == 'Отмена':
+        await cmd_start(message)
+
+    elif message.text in WEEK:
+        data[message.from_user.id] = WEEK.index(message.text)
+        await message.answer(
+            text='Напиши время',
+            reply_markup=types.ReplyKeyboardRemove(),
+        )
+
+    elif (
+        message.from_user.id in data
+        and message.text
+        and (time := parse_time(message.text))
+    ):
+        logging.info(
+            f'Change alarm time for user={message.from_user.id} '
+            f'day={data[message.from_user.id]} time={time}'
+        )
+        del data[message.from_user.id]
+        await message.answer('Сохранил')
+        await cmd_start(message)
+
     else:
-        logging.error('drop alarm')
+        await message.answer('Я чет не пон :(')
+        await cmd_start(message)
 
 
-async def schedule_handler():
-    while True:
-        schedule.run_pending()
-        await asyncio.sleep(1)
+@dp.callback_query(F.data == 'view')
+async def callback_view(callback: types.CallbackQuery):
+    if not isinstance(callback.message, types.Message):
+        logging.warning('callback.message is not instance of types.Message')
+        return
+    text, markup = get_timetable_message()
+    try:
+        await callback.message.edit_text(text=text, reply_markup=markup)
+    except exceptions.TelegramBadRequest:
+        pass  # ignore message is not modified
+    await callback.answer()
 
 
-alarms = Alarms(sunrise)
+@dp.callback_query(F.data == 'edit')
+async def callback_edit(callback: types.CallbackQuery):
+    if not isinstance(callback.message, types.Message):
+        logging.warning('callback.message is not instance of types.Message')
+        return
+    markup = types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text=WEEK[1]), types.KeyboardButton(text=WEEK[4])],
+            [types.KeyboardButton(text=WEEK[2]), types.KeyboardButton(text=WEEK[5])],
+            [types.KeyboardButton(text=WEEK[3]), types.KeyboardButton(text=WEEK[6])],
+            [types.KeyboardButton(text='Отмена'), types.KeyboardButton(text=WEEK[0])],
+        ]
+    )
+    await callback.message.answer(text='Выбери день?', reply_markup=markup)
+    await callback.message.edit_reply_markup()
 
-with open('data') as data:
-    for i, time in enumerate(data.read().split()):
-        alarms.add(i, time)
 
-loop = asyncio.get_event_loop()
-loop.create_task(schedule_handler())
-loop.run_forever()
+async def main():
+    await dp.start_polling(bot)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

@@ -36,7 +36,6 @@ class Alarms:
     async def __call__(self) -> None:
         while True:
             now = datetime.now()
-            print(now)
             for _, time in self.alarms.items():
                 if now > time:
                     time += timedelta(weeks=1)

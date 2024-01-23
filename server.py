@@ -138,7 +138,7 @@ async def callback_edit(callback: types.CallbackQuery):
 
 def sunrise(value=b'\x01'):
     logging.info(f'Sending {value=}')
-    for i in range(5):
+    for _ in range(5):
         try:
             with Serial('./ttybt', timeout=0.1) as device:
                 device.write(value)
@@ -156,10 +156,8 @@ def sunrise(value=b'\x01'):
 
 
 async def main():
-    await asyncio.gather(
-        dp.start_polling(bot),
-        alarms(),
-    )
+    asyncio.create_task(alarms())
+    await dp.start_polling(bot)
 
 
 with open('profiles.json') as file:
